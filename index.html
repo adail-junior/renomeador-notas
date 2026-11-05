@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Renomeador de Notas</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: formulário de DANFE — campos em caixas com rótulo pequeno; uma faixa de entrada, depois a lista de notas como linhas de canhoto */
+:root{
+  --paper:#F3F5F2; --sheet:#FFFFFF; --ink:#18221E; --muted:#5D6B64; --rule:#C9D2CC; --rule-soft:#E2E8E4;
+  --stamp:#2B47A8; --stamp-soft:#E6EBFA; --ok:#1E7A4C; --ok-soft:#E1F2E8; --warn:#9A6200; --warn-soft:#FBF0D9;
+  --bad:#B3261E; --bad-soft:#FBE4E2;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#121816; --sheet:#1A2220; --ink:#E5ECE8; --muted:#97A59E; --rule:#34413C; --rule-soft:#26302C;
+  --stamp:#8FA6F2; --stamp-soft:#1F2846; --ok:#6CCB97; --ok-soft:#173326; --warn:#E8B860; --warn-soft:#3A2D12;
+  --bad:#F08A82; --bad-soft:#3D1C1A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#121816; --sheet:#1A2220; --ink:#E5ECE8; --muted:#97A59E; --rule:#34413C; --rule-soft:#26302C;
+  --stamp:#8FA6F2; --stamp-soft:#1F2846; --ok:#6CCB97; --ok-soft:#173326; --warn:#E8B860; --warn-soft:#3A2D12;
+  --bad:#F08A82; --bad-soft:#3D1C1A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:1080px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+h1{font-family:var(--f-display);font-weight:700;font-size:clamp(28px,5vw,40px);letter-spacing:.01em;margin:0;line-height:1.05;text-wrap:balance}
+.lede{color:var(--muted);margin:6px 0 0;max-width:62ch}
+.lbl{font-family:var(--f-display);font-weight:600;font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header .fmt{display:inline-flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-top:12px;border:1px solid var(--rule);background:var(--sheet);padding:8px 12px;border-radius:4px}
+header .fmt .mono{font-size:13.5px}
+
+.drop{border:1.5px dashed var(--rule);background:var(--sheet);border-radius:6px;padding:26px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.over{border-color:var(--stamp);background:var(--stamp-soft)}
+.drop:focus-within{outline:2px solid var(--stamp);outline-offset:2px}
+.drop .icon{width:52px;height:64px;flex:none;border:1.5px solid var(--ink);border-radius:3px;position:relative;background:var(--paper)}
+.drop .icon::before{content:"PDF";position:absolute;bottom:8px;left:0;right:0;text-align:center;font-family:var(--f-display);font-weight:700;font-size:13px;color:var(--stamp)}
+.drop .icon::after{content:"";position:absolute;top:10px;left:9px;right:9px;height:16px;border-top:2px solid var(--rule);border-bottom:2px solid var(--rule)}
+.drop .txt{flex:1;min-width:200px}
+.drop strong{font-family:var(--f-display);font-size:21px;font-weight:600;display:block}
+.drop span{color:var(--muted)}
+.drop input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.counts{display:flex;gap:18px;flex-wrap:wrap}
+.counts div{display:flex;flex-direction:column}
+.counts b{font-family:var(--f-display);font-size:24px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:600 14px var(--f-body);border-radius:4px;padding:9px 14px;border:1px solid var(--rule);background:var(--sheet);color:var(--ink);cursor:pointer}
+button:hover:not(:disabled){border-color:var(--ink)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--stamp);outline-offset:1px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.primary{background:var(--stamp);border-color:var(--stamp);color:var(--sheet)}
+button.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--stamp)}
+button.small{padding:5px 9px;font-size:13px}
+
+.msg{padding:10px 14px;border-radius:4px;border:1px solid var(--rule);background:var(--sheet)}
+.msg.warn{background:var(--warn-soft);border-color:transparent;color:var(--ink)}
+.msg.bad{background:var(--bad-soft);border-color:transparent}
+
+.list{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 120px minmax(0,1.5fr) 118px auto;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--rule-soft)}
+.row.head{border-top:0;background:var(--paper);padding-block:8px}
+.row.example{opacity:.62}
+.orig{min-width:0;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orig small{display:block;font-family:var(--f-body);font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.field{display:flex;flex-direction:column;gap:2px;min-width:0}
+.field .lbl{display:none}
+input[type=text]{width:100%;min-width:0;font:500 14px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:7px 8px}
+input.num{font-family:var(--f-mono);font-size:13.5px}
+input.empty{border-color:var(--warn);background:var(--warn-soft)}
+.final{min-width:0;font-family:var(--f-mono);font-size:13.5px;font-weight:500;overflow-wrap:anywhere}
+.final.pending{color:var(--muted);font-weight:400}
+.chip{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--f-body);padding:3px 9px;border-radius:999px;white-space:nowrap;justify-self:start}
+.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.ai{background:var(--stamp-soft);color:var(--stamp)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.busy{background:var(--paper);color:var(--muted)}
+.chip.busy::before{animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.chip.busy::before{animation:none}}
+.rowact{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.preview{grid-column:1/-1;max-height:70vh;overflow:auto;border:1px solid var(--rule);border-radius:4px;background:#fff}
+.preview img{display:block;width:100%;max-width:100%;height:auto}
+.empty-list{padding:28px 16px;color:var(--muted);text-align:center}
+
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.opt{background:var(--sheet);border:1px solid var(--rule);border-radius:6px;padding:12px 14px;display:flex;gap:14px;align-items:center;justify-content:space-between}
+.opt>div{min-width:0}
+.opt p{margin:3px 0 0;color:var(--muted);font-size:13.5px}
+.opt p b{color:var(--ink)}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;flex:none;font-size:13px}
+.switch input{position:absolute;opacity:0;width:1px;height:1px}
+.switch span{width:38px;height:22px;border-radius:999px;background:var(--rule);position:relative;transition:background .15s}
+.switch span::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--sheet);transition:transform .15s}
+.switch input:checked+span{background:var(--stamp)}
+.switch input:checked+span::after{transform:translateX(16px)}
+.switch input:focus-visible+span{outline:2px solid var(--stamp);outline-offset:2px}
+.switch b{min-width:64px}
+.btnlike{flex:none;font:600 14px var(--f-body);border-radius:4px;padding:8px 13px;border:1px solid var(--rule);background:var(--paper);cursor:pointer;position:relative}
+.btnlike:hover{border-color:var(--ink)}
+.btnlike:focus-within{outline:2px solid var(--stamp);outline-offset:1px}
+.btnlike input{position:absolute;opacity:0;width:1px;height:1px}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.note{border-top:2px solid var(--ink);padding-top:8px}
+.note p{margin:4px 0 0;color:var(--muted);font-size:14px;max-width:60ch}
+
+@media (max-width:820px){
+  .row.head{display:none}
+  .row{grid-template-columns:1fr 1fr;gap:8px 10px;padding:14px}
+  .orig{grid-column:1/-1}
+  .field .lbl{display:block}
+  .final{grid-column:1/-1;padding:6px 8px;background:var(--paper);border-radius:3px}
+  .rowact{justify-content:flex-start}
+}
+</style>
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <div class="lbl">Almoxarifado · lançamento de notas</div>
+    <h1>Renomeador de Notas</h1>
+    <p class="lede">Importe os PDFs escaneados do pendrive. O app lê cada nota, encontra o fornecedor (emitente) e o número da NF e devolve os arquivos já renomeados.</p>
+    <div class="fmt"><span class="lbl">Padrão do nome</span><span class="mono">NOME FANTASIA - NF12345.pdf</span></div>
+  </header>
+
+  <label class="drop" id="drop" for="fileInput">
+    <div class="icon" aria-hidden="true"></div>
+    <div class="txt">
+      <strong>Arraste os PDFs aqui ou clique para escolher</strong>
+      <span>Pode selecionar todos de uma vez (Ctrl+A na pasta do pendrive).</span>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple>
+  </label>
+
+  <div class="opts">
+    <div class="opt" id="optIABox">
+      <div><span class="lbl">Leitura pela IA</span>
+        <p>Desligada, o app lê só o texto do PDF e o código de barras da DANFE, sem gastar seus limites.</p></div>
+      <label class="switch"><input type="checkbox" id="optIA"><span aria-hidden="true"></span><b id="optIATxt">Desligada</b></label>
+    </div>
+    <div class="opt">
+      <div><span class="lbl">Fornecedores cadastrados</span>
+        <p><b id="fornCount" class="mono">0</b> CNPJs com nome salvo. Importe um CSV do Excel com as colunas CNPJ e Nome fantasia.</p></div>
+      <label class="btnlike" for="csvInput">Importar CSV<input type="file" id="csvInput" accept=".csv,.txt,text/csv"></label>
+    </div>
+  </div>
+
+  <div id="msgs"></div>
+
+  <div class="bar">
+    <div class="counts">
+      <div><span class="lbl">Notas</span><b id="cTotal">0</b></div>
+      <div><span class="lbl">Prontas</span><b id="cOk">0</b></div>
+      <div><span class="lbl">Conferir</span><b id="cWarn">0</b></div>
+      <div><span class="lbl">Lendo</span><b id="cBusy">0</b></div>
+    </div>
+    <div class="actions">
+      <button id="btnClear" type="button">Limpar lista</button>
+      <button id="btnZip" class="primary" type="button" disabled>Baixar todas (.zip)</button>
+    </div>
+  </div>
+
+  <div class="list" id="list" role="table" aria-label="Notas importadas">
+    <div class="row head" role="row">
+      <span class="lbl">Arquivo original</span>
+      <span class="lbl">Fornecedor</span>
+      <span class="lbl">Nº da NF</span>
+      <span class="lbl">Novo nome</span>
+      <span class="lbl">Leitura</span>
+      <span></span>
+    </div>
+    <div id="rows"></div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><span class="lbl">Como lê</span><p>1º o texto do PDF (canhoto "Recebemos de…" e chave de acesso). 2º o código de barras da DANFE, que traz o número da NF e o CNPJ, e o nome vem do cadastro de fornecedores. </p></div>
+    <div class="note"><span class="lbl">Conferir</span><p>Linhas em amarelo ficaram com campo vazio ou leitura duvidosa. Corrija o fornecedor ou o número na própria linha antes de baixar.</p></div>
+    <div class="note"><span class="lbl">Nome fantasia</span><p>Na primeira nota de cada CNPJ, digite o nome fantasia ou clique em Confirmar se a sugestão já estiver certa. O app guarda pelo CNPJ e preenche sozinho nas próximas notas dele, neste navegador.</p></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const rowsEl=$("#rows"), msgsEl=$("#msgs");
+if(window.pdfjsLib){ pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"; }
+
+let items=[]; let nextId=1; let sample=null, downloads=null, sampleImages=false, sampleReady=false;
+let aiQueue=[], aiRunning=0; const AI_MAX=2;
+
+/* ---- memória por CNPJ (só neste navegador) ---- */
+const KEY="renomeador-nf-fornecedores";
+function loadAlias(){try{return JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){return {}}}
+function saveAlias(cnpj,nome){if(!cnpj||!nome)return;try{const m=loadAlias();m[cnpj]=nome;localStorage.setItem(KEY,JSON.stringify(m))}catch(e){} contaForn();}
+function contaForn(){const el=document.getElementById("fornCount"); if(el) el.textContent=Object.keys(loadAlias()).length;}
+const IAKEY="renomeador-nf-ia";
+let iaOn=false; try{iaOn=localStorage.getItem(IAKEY)==="1"}catch(e){}
+
+/* chave de acesso: confere o dígito verificador (módulo 11) */
+function chaveValida(k){
+  if(!/^\d{44}$/.test(k))return false;
+  let s=0,w=2; for(let i=42;i>=0;i--){s+=(+k[i])*w; w=w===9?2:w+1;}
+  let dv=11-(s%11); if(dv>=10)dv=0; return dv===+k[43];
+}
+
+/* código de barras da DANFE (Code 128 com a chave de acesso) — leitor próprio, roda no navegador */
+/* Leitor Code 128 próprio (sem biblioteca) — focado na chave de acesso da DANFE */
+const C128=["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232"].map(s=>s.split("").map(Number));
+const STOP=[2,3,3,1,1,1,2];
+const C128E=C128.map(p=>[p[0]+p[1],p[1]+p[2],p[2]+p[3],p[3]+p[4]]);
+function casa(runs,i,n,mod){ // devolve [melhor código, distância]; usa distâncias borda-a-borda (resistem a borrão e tinta espalhada)
+  let tot=0; for(let k=0;k<n;k++) tot+=runs[i+k]; if(!tot) return [-1,99];
+  const u=tot/mod;
+  if(n===7){ let d=0; for(let k=0;k<7;k++) d+=Math.abs(runs[i+k]/u-STOP[k]); return [106,d]; }
+  const e0=(runs[i]+runs[i+1])/u, e1=(runs[i+1]+runs[i+2])/u, e2=(runs[i+2]+runs[i+3])/u, e3=(runs[i+3]+runs[i+4])/u;
+  let best=-1,bd=99;
+  for(let c=0;c<106;c++){ const E=C128E[c], p=C128[c];
+    let d=Math.abs(e0-E[0])+Math.abs(e1-E[1])+Math.abs(e2-E[2])+Math.abs(e3-E[3]);
+    if(d-0.0>=bd) continue;
+    let db=0; for(let k=0;k<6;k++) db+=Math.abs(runs[i+k]/u-p[k]);
+    d+=db*0.25; if(d<bd){bd=d;best=c;} }
+  return [best,bd];
+}
+function decodRuns(runs,first){ // runs alternam cores; first = cor do runs[0] (1=preto)
+  for(let i=(first?0:1); i+6<runs.length; i+=2){
+    const [s,ds]=casa(runs,i,6,11); if(s<103||ds>2.2) continue;
+    const u=(runs[i]+runs[i+1]+runs[i+2]+runs[i+3]+runs[i+4]+runs[i+5])/11;
+    if(i>0 && runs[i-1]<u*4) continue; // zona de silêncio
+    const vals=[s]; let j=i+6, ok=false;
+    while(j+6<=runs.length && vals.length<80){
+      const [st,dst]=casa(runs,j,7,13);
+      if(dst<2.0 && vals.length>=3){ ok=true; break; }
+      const [c,dc]=casa(runs,j,6,11); if(c<0||dc>2.8||c>=103) break;
+      vals.push(c); j+=6;
+    }
+    if(!ok) continue;
+    const chk=vals.pop(); let sum=vals[0]; for(let k=1;k<vals.length;k++) sum+=k*vals[k];
+    if(sum%103!==chk) continue;
+    let set=vals[0]===105?"C":vals[0]===104?"B":"A", out="";
+    for(let k=1;k<vals.length;k++){ const v=vals[k];
+      if(set==="C"){ if(v<100) out+=String(v).padStart(2,"0"); else if(v===100) set="B"; else if(v===101) set="A"; }
+      else { if(v===99) set="C"; else if(v<96) out+=String.fromCharCode(v+32); } }
+    return out;
+  }
+  return null;
+}
+/* lum: tons de cinza W×H. Média de faixas de linhas (apaga o pontilhado do scanner), bordas com
+   precisão de fração de pixel, limiar local (nota desfocada) e faixas inclinadas (nota torta). */
+function perfilRuns(prof,janela){
+  const n=prof.length, ord=Float32Array.from(prof).sort();
+  const lo=ord[Math.floor(n*0.03)], hi=ord[Math.floor(n*0.97)];
+  if(hi-lo<30) return null;
+  const g=(lo+hi)/2, thr=new Float32Array(n);
+  if(!janela) thr.fill(g);
+  else { // mín/máx em janela deslizante, calculado a cada 4 px e interpolado
+    for(let x=0;x<n;x+=4){ let mn=255,mx=0; const a=Math.max(0,x-janela), b=Math.min(n-1,x+janela);
+      for(let k=a;k<=b;k++){const v=prof[k]; if(v<mn)mn=v; if(v>mx)mx=v;}
+      const t=(mx-mn)>(hi-lo)*0.3 ? (mn+mx)/2 : g; for(let k=x;k<Math.min(n,x+4);k++) thr[k]=t; } }
+  const runs=[]; let prev=0, cor=prof[0]<thr[0]?1:0; const first=cor;
+  for(let x=1;x<n;x++){ const c=prof[x]<thr[x]?1:0; if(c!==cor){
+      const d0=prof[x-1]-thr[x-1], d1=prof[x]-thr[x]; const pos=(x-1)+(d0===d1?0.5:d0/(d0-d1));
+      runs.push(pos-prev); prev=pos; cor=c; } }
+  runs.push(n-prev); return [runs,first];
+}
+function tentaPerfil(prof,valida){
+  for(const jan of [0,Math.round(prof.length/120),Math.round(prof.length/60)]){
+    const pr=perfilRuns(prof,jan); if(!pr) return null; if(pr[0].length<60){ if(!jan) return null; continue; }
+    const [runs,first]=pr;
+    let t=decodRuns(runs,first); if(t&&valida(t)) return t;
+    const rv=runs.slice().reverse(); const f2=(runs.length%2===1)?first:1-first;
+    t=decodRuns(rv,f2); if(t&&valida(t)) return t;
+  }
+  return null;
+}
+function leCode128(lum,W,H,valida){
+  // tentativas mais prováveis primeiro: reto, levemente torto, depois mais torto
+  const cfgs=[[0,0.012],[1.5,0.008],[-1.5,0.008],[0,0.006],[0,0.025],[3,0.005],[-3,0.005],[0.75,0.012],[-0.75,0.012],[4.5,0.004],[-4.5,0.004]];
+  for(const girado of [false,true]){
+    let img=lum, len=W, nLin=H;
+    if(girado){ img=new Uint8ClampedArray(W*H); for(let y=0;y<H;y++) for(let x=0;x<W;x++) img[x*H+y]=lum[y*W+x]; len=H; nLin=W; }
+    // somas acumuladas por coluna: a média de qualquer faixa sai em O(1)
+    const P=new Uint32Array((nLin+1)*len);
+    for(let r=0;r<nLin;r++){ const o=r*len, o2=o+len; for(let x=0;x<len;x++) P[o2+x]=P[o+x]+img[o+x]; }
+    const prof=new Float32Array(len);
+    for(const [ang,fr] of cfgs){
+      const B=Math.max(3,Math.round(nLin*fr)), step=Math.max(2,Math.round(B/2)), tg=Math.tan(ang*Math.PI/180);
+      const desl=new Int32Array(len); for(let x=0;x<len;x++) desl[x]=Math.round((x-len/2)*tg);
+      for(let a=0;a+B<=nLin;a+=step){
+        for(let x=0;x<len;x++){ let r0=a+desl[x], r1=r0+B; if(r0<0)r0=0; if(r1>nLin)r1=nLin;
+          prof[x]= r1>r0 ? (P[r1*len+x]-P[r0*len+x])/(r1-r0) : 255; }
+        const t=tentaPerfil(prof,valida); if(t) return t;
+      }
+    }
+  }
+  return null;
+}
+
+async function renderLum(page,scale,rx,ry,rw,rh){ // rx..rh em fração da página
+  const vp=page.getViewport({scale});
+  const W=Math.round(vp.width*rw), H=Math.round(vp.height*rh);
+  const cv=document.createElement("canvas"); cv.width=W; cv.height=H;
+  const ctx=cv.getContext("2d",{willReadFrequently:true}); ctx.fillStyle="#fff"; ctx.fillRect(0,0,W,H);
+  // o leitor de PDF amplia a imagem do scanner "em blocos" (sem suavizar), o que deforma as barras finas.
+  // Forçamos a ampliação suavizada.
+  try{ ctx.imageSmoothingQuality="high"; Object.defineProperty(ctx,"imageSmoothingEnabled",{get(){return true},set(){},configurable:true}); }catch(e){}
+  await page.render({canvasContext:ctx,viewport:vp,transform:[1,0,0,1,-Math.round(vp.width*rx),-Math.round(vp.height*ry)]}).promise;
+  const px=ctx.getImageData(0,0,W,H).data; const lum=new Uint8ClampedArray(W*H);
+  for(let i=0,j=0;i<lum.length;i++,j+=4) lum[i]=(px[j]+2*px[j+1]+px[j+2])>>2;
+  cv.width=cv.height=0;
+  return {lum,W,H};
+}
+async function leCodigoBarras(page){
+  const v1=page.getViewport({scale:1}), maior=Math.max(v1.width,v1.height);
+  // 1) página inteira em duas resoluções
+  for(const alvo of [1650,2500]){
+    const {lum,W,H}=await renderLum(page,alvo/maior,0,0,1,1);
+    const d=leCode128(lum,W,H,chaveValida); if(d) return d;
+    await new Promise(r=>setTimeout(r,0));
+  }
+  return null;
+}
+async function geraPrevia(it){
+  if(it.previa||!it._page)return;
+  try{ const b=await paginaImagem(it._page); it.previa=URL.createObjectURL(b); }catch(e){}
+}
+
+/* ---- regras de nome ---- */
+function semAcento(s){return (s||"").normalize("NFD").replace(/[̀-ͯ]/g,"")}
+function primeiroNome(razao){
+  const words=semAcento(razao).toUpperCase().replace(/[^A-Z0-9& ]+/g," ").trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return "";
+  let out=[words[0]], i=1;
+  while(out.join("").length<=1 && words[i] && words[i].length<=2){ out.push(words[i]); i++; } // ex.: "M R COMERCIO" -> "M R"
+  return out.join(" ");
+}
+function limpaNumero(n){const d=String(n||"").replace(/\D/g,"").replace(/^0+/,"");return d}
+function nomeFinal(it){
+  const f=(it.fornecedor||"").trim().toUpperCase(), n=limpaNumero(it.numero);
+  if(!f||!n) return "";
+  return `${f.replace(/[\\/:*?"<>|]/g,"")} - NF${n}.pdf`;
+}
+function nomesUnicos(){
+  const seen={}, out={};
+  for(const it of items){ const b=nomeFinal(it); if(!b) continue;
+    const k=b.toLowerCase(); seen[k]=(seen[k]||0)+1;
+    out[it.id]= seen[k]>1 ? b.replace(/\.pdf$/,` (${seen[k]}).pdf`) : b; }
+  return out;
+}
+
+/* ---- leitura de texto (DANFE) ---- */
+function analisaTexto(txt){
+  const flat=txt.replace(/\s+/g," ");
+  const r={razao:"",numero:"",cnpj:""};
+  // chave de acesso: 44 dígitos, às vezes em grupos de 4
+  const cands=flat.match(/(?:\d[\d .]{42,60}\d)/g)||[];
+  for(const c of cands){const d=c.replace(/\D/g,""); for(let i=0;i+44<=d.length;i++){const k=d.substr(i,44);
+    if(/^(1[1-7]|2[1-9]|3[1-35]|4[1-3]|5[0-3])/.test(k) && /^5[57]$/.test(k.substr(20,2))){ r.numero=limpaNumero(k.substr(25,9)); r.cnpj=k.substr(6,14); break; } } if(r.numero)break;}
+  if(!r.numero){const m=flat.match(/N[º°oO]\.?\s*:?\s*(\d{3}[.\s]?\d{3}[.\s]?\d{3})\b/); if(m) r.numero=limpaNumero(m[1]);}
+  if(!r.numero){const m=flat.match(/N[úu]mero da Nota\s*:?\s*(\d{1,15})/i); if(m) r.numero=limpaNumero(m[1]);}
+  const rec=flat.match(/RECEBEMOS DE\s+(.+?)\s+OS PRODUTOS/i); if(rec) r.razao=rec[1].trim();
+  if(!r.cnpj){const m=flat.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}/); if(m) r.cnpj=m[0].replace(/\D/g,"");}
+  return r;
+}
+
+async function lePdf(it){
+  const pdf=await pdfjsLib.getDocument({data:it.buf.slice(0),isEvalSupported:false}).promise;
+  const page=await pdf.getPage(1);
+  const tc=await page.getTextContent();
+  const txt=tc.items.map(t=>t.str).join(" ");
+  return {pdf,page,txt};
+}
+async function paginaImagem(page){
+  const v1=page.getViewport({scale:1});
+  const scale=Math.min(2.5,1700/Math.max(v1.width,v1.height));
+  const vp=page.getViewport({scale});
+  const cv=document.createElement("canvas"); cv.width=Math.round(vp.width); cv.height=Math.round(vp.height);
+  const ctx=cv.getContext("2d"); ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+  try{ ctx.imageSmoothingQuality="high"; Object.defineProperty(ctx,"imageSmoothingEnabled",{get(){return true},set(){},configurable:true}); }catch(e){}
+  await page.render({canvasContext:ctx,viewport:vp}).promise;
+  return await new Promise(res=>cv.toBlob(res,"image/jpeg",0.85));
+}
+
+function nomeLimpo(s){ return semAcento(s).toUpperCase().replace(/[^A-Z0-9& ]+/g," ").replace(/\s+/g," ").trim().slice(0,40); }
+function aplica(it,r,origem){
+  const alias=loadAlias();
+  it.cnpj=r.cnpj||it.cnpj||"";
+  it.razao=r.razao||it.razao||"";
+  if(r.fantasia) it.fantasia=r.fantasia;
+  const salvo=it.cnpj&&alias[it.cnpj];
+  it.fornecedor= salvo || nomeLimpo(it.fantasia) || primeiroNome(it.razao) || it.fornecedor;
+  it.confirmar = !salvo && !!it.fornecedor; // sugestão: o nome fantasia precisa ser confirmado uma vez
+  it.numero= r.numero || it.numero;
+  it.origem=origem;
+}
+
+async function processa(it){
+  it.status="busy"; it.statusTxt="Lendo PDF"; render();
+  try{
+    const {page,txt}=await lePdf(it);
+    it._page=page;
+    const r=analisaTexto(txt);
+    aplica(it,r,"texto");
+    if(it.fornecedor && it.numero){ if(it.confirmar){it.status="warn";it.statusTxt="Confirme o nome";}else{it.status="ok";it.statusTxt="Lido do texto";} render(); return; }
+    if(!it.numero){
+      it.statusTxt="Lendo código de barras"; render();
+      const chave=await leCodigoBarras(page);
+      if(chave){ aplica(it,{numero:limpaNumero(chave.substr(25,9)),cnpj:chave.substr(6,14)},"barras");
+        if(it.fornecedor){ it.status="ok"; it.statusTxt="Lido do cód. barras"; render(); return; } }
+    }
+    await geraPrevia(it);
+    if(!it.numero) it.diag = txt.trim().length>20 ? "Texto do PDF sem nº de NF e código de barras não encontrado" : "PDF só imagem e código de barras não encontrado";
+    if(it.numero && !it.fornecedor && !iaOn){ it.status="warn"; it.statusTxt="Digite o fornecedor"; it.aberta=true; render(); return; }
+    if(!iaOn) it.aberta=true;
+    enfileiraIA(it);
+  }catch(e){
+    it.status="bad"; it.statusTxt="PDF ilegível"; it.erro="Não foi possível abrir este PDF."; render();
+  }
+}
+
+function enfileiraIA(it){
+  if(!iaOn){ it.status="warn"; it.statusTxt="Preencher à mão"; render(); return; }
+  if(!sampleReady){ it.status="busy"; it.statusTxt="Aguardando IA"; aiQueue.push(it); render(); return; }
+  if(!sample || !sampleImages){ it.status="warn"; it.statusTxt="Preencher à mão"; render(); return; }
+  it.status="busy"; it.statusTxt="Na fila da IA"; aiQueue.push(it); render(); bombeia();
+}
+function bombeia(){
+  while(aiRunning<AI_MAX && aiQueue.length){ const it=aiQueue.shift(); aiRunning++; leComIA(it).finally(()=>{aiRunning--; bombeia();}); }
+}
+
+const PROMPT=`Esta imagem é a primeira página de uma nota fiscal brasileira escaneada (DANFE de NF-e, NFS-e, nota de serviço ou nota modelo antigo). A imagem pode estar torta ou de cabeça para baixo.
+Identifique:
+- o EMITENTE da nota (o fornecedor que vendeu ou prestou o serviço). Não confunda com o DESTINATÁRIO/TOMADOR, que é a empresa que comprou.
+- o número da nota fiscal.
+- o NOME FANTASIA do emitente (nome comercial curto, geralmente no logotipo ou no cabeçalho, acima ou ao lado da razão social). Se não houver nome fantasia visível, deixe vazio.
+- o CNPJ do emitente.
+- a chave de acesso de 44 dígitos, se aparecer.
+Responda somente com JSON, sem texto em volta, neste formato:
+{"nome_fantasia":"nome fantasia do emitente ou vazio","razao_social":"nome completo do emitente","cnpj":"só dígitos ou vazio","numero_nf":"só dígitos","chave_acesso":"44 dígitos ou vazio","confianca":"alta|media|baixa"}
+Se algum campo não estiver legível, deixe "" e use confianca "baixa".`;
+
+async function leComIA(it){
+  it.status="busy"; it.statusTxt="Claude lendo…"; render();
+  try{
+    if(!it._page){ const {page}=await lePdf(it); it._page=page; }
+    const img=await paginaImagem(it._page);
+    const j=await sample.json(PROMPT,{images:[img],modelTier:"default"});
+    let numero=limpaNumero(j.numero_nf), cnpj=String(j.cnpj||"").replace(/\D/g,"");
+    const chave=String(j.chave_acesso||"").replace(/\D/g,"");
+    let duvida=(j.confianca||"")!=="alta";
+    if(chave.length===44){ const nC=limpaNumero(chave.substr(25,9)); if(numero && nC && nC!==numero) duvida=true; if(!numero) numero=nC; if(!cnpj) cnpj=chave.substr(6,14); }
+    aplica(it,{razao:j.razao_social||"",fantasia:j.nome_fantasia||"",numero,cnpj},"ia");
+    if(it.fornecedor && it.numero && !duvida && !it.confirmar){ it.status="ai"; it.statusTxt="Lido pela IA"; }
+    else if(it.fornecedor && it.numero && !duvida){ it.status="warn"; it.statusTxt="Confirme o nome"; }
+    else { it.status="warn"; it.statusTxt= (it.fornecedor&&it.numero)?"Conferir leitura":"Preencher campo"; }
+  }catch(e){
+    const code=e&&e.code;
+    if(code==="not_granted"){ sample=null; it.status="warn"; it.statusTxt="Preencher à mão"; aviso("A leitura pela IA não foi permitida. Preencha fornecedor e número das notas escaneadas à mão.","warn"); }
+    else if(code==="rate_limited"){ it.status="warn"; it.statusTxt="IA ocupada"; it.retry=true; aviso("Muitas leituras ao mesmo tempo. Aguarde um pouco e clique em “Reler” nas notas pendentes.","warn"); }
+    else { it.status="warn"; it.statusTxt="Preencher à mão"; it.retry=true; }
+  }
+  render();
+}
+
+/* ---- avisos ---- */
+const shown=new Set();
+function aviso(t,kind){ if(shown.has(t))return; shown.add(t); const d=document.createElement("div"); d.className="msg "+(kind||""); d.textContent=t; msgsEl.appendChild(d); }
+
+/* ---- render ---- */
+function esc(s){return String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+const EXEMPLOS=[
+  {orig:"SCAN0001.pdf",sub:"IRRICAMPO EQUIPAMENTOS LTDA",forn:"IRRICAMPO",num:"10127",chip:["ok","Lido do texto"]},
+  {orig:"SCAN0002.pdf",sub:"FERRAGENS CENTRO-OESTE LTDA",forn:"FERRAGENS",num:"48812",chip:["ai","Lido pela IA"]},
+  {orig:"SCAN0003.pdf",sub:"",forn:"",num:"",chip:["warn","Preencher campo"]},
+];
+function render(){
+  const finals=nomesUnicos();
+  if(!items.length){
+    rowsEl.innerHTML=EXEMPLOS.map(e=>`<div class="row example" role="row" aria-label="Exemplo">
+      <div class="orig mono">${e.orig}<small>Exemplo${e.sub?" · "+e.sub:""}</small></div>
+      <div class="field"><span class="lbl">Fornecedor</span><input type="text" value="${e.forn}" disabled class="${e.forn?"":"empty"}" aria-label="Fornecedor"></div>
+      <div class="field"><span class="lbl">Nº da NF</span><input type="text" class="num ${e.num?"":"empty"}" value="${e.num}" disabled aria-label="Número"></div>
+      <div class="final ${e.forn?"":"pending"}">${e.forn?`${e.forn} - NF${e.num}.pdf`:"falta fornecedor e número"}</div>
+      <span class="chip ${e.chip[0]}">${e.chip[1]}</span><div class="rowact"></div></div>`).join("")
+      +`<div class="empty-list">Linhas de exemplo. Importe os PDFs acima para começar.</div>`;
+  } else {
+    rowsEl.innerHTML=items.map(it=>{
+      const fn=finals[it.id]; const busy=it.status==="busy";
+      const falta=[!it.fornecedor&&"fornecedor",!limpaNumero(it.numero)&&"número"].filter(Boolean).join(" e ");
+      return `<div class="row" role="row" data-id="${it.id}">
+        <div class="orig mono" title="${esc(it.nome)}">${esc(it.nome)}<small>${esc(it.razao||it.erro||it.diag||"")}${it.cnpj?" · CNPJ "+esc(it.cnpj):""}</small></div>
+        <div class="field"><span class="lbl">Fornecedor</span><input type="text" id="f-${it.id}" data-k="fornecedor" value="${esc(it.fornecedor)}" ${busy?"disabled":""} class="${!busy&&!it.fornecedor?"empty":""}" aria-label="Fornecedor de ${esc(it.nome)}"></div>
+        <div class="field"><span class="lbl">Nº da NF</span><input type="text" inputmode="numeric" id="n-${it.id}" data-k="numero" value="${esc(it.numero)}" ${busy?"disabled":""} class="num ${!busy&&!limpaNumero(it.numero)?"empty":""}" aria-label="Número da nota de ${esc(it.nome)}"></div>
+        <div class="final ${fn?"":"pending"}">${fn?esc(fn):busy?"lendo…":"falta "+falta}</div>
+        <span class="chip ${it.status}">${esc(it.statusTxt)}</span>
+        <div class="rowact">
+          ${iaOn&&sample&&sampleImages&&!busy?`<button class="small" type="button" data-act="ia" title="Ler de novo com o Claude">Reler</button>`:""}
+          ${it.confirmar&&it.fornecedor&&!busy?`<button class="small" type="button" data-act="ok" title="Guardar este nome fantasia para o CNPJ">Confirmar</button>`:""}
+          ${it.previa?`<button class="small" type="button" data-act="ver" aria-expanded="${it.aberta?"true":"false"}">${it.aberta?"Fechar":"Ver nota"}</button>`:""}
+          <button class="small" type="button" data-act="dl" ${fn?"":"disabled"}>Baixar</button>
+        </div>
+        ${it.previa&&it.aberta?`<div class="preview"><img src="${it.previa}" alt="Primeira página de ${esc(it.nome)}"></div>`:""}</div>`;}).join("");
+  }
+  const ok=items.filter(i=>nomeFinal(i)&&i.status!=="busy").length;
+  $("#cTotal").textContent=items.length;
+  $("#cOk").textContent=items.filter(i=>(i.status==="ok"||i.status==="ai")&&nomeFinal(i)).length;
+  $("#cWarn").textContent=items.filter(i=>i.status==="warn"||i.status==="bad"||(i.status!=="busy"&&!nomeFinal(i))).length;
+  $("#cBusy").textContent=items.filter(i=>i.status==="busy").length;
+  $("#btnZip").disabled=!ok;
+}
+
+/* edição sem re-render a cada tecla */
+rowsEl.addEventListener("input",e=>{
+  const inp=e.target.closest("input[data-k]"); if(!inp)return;
+  const it=items.find(i=>i.id==inp.closest(".row").dataset.id); if(!it)return;
+  it[inp.dataset.k]= inp.dataset.k==="fornecedor"? inp.value.toUpperCase() : inp.value;
+  inp.classList.toggle("empty", inp.dataset.k==="fornecedor"? !it.fornecedor.trim() : !limpaNumero(it.numero));
+  const fn=nomesUnicos()[it.id]; const f=inp.closest(".row").querySelector(".final");
+  f.textContent=fn||"falta "+[!it.fornecedor.trim()&&"fornecedor",!limpaNumero(it.numero)&&"número"].filter(Boolean).join(" e ");
+  f.classList.toggle("pending",!fn);
+  inp.closest(".row").querySelector('[data-act="dl"]').disabled=!fn;
+});
+rowsEl.addEventListener("change",e=>{
+  const inp=e.target.closest("input[data-k]"); if(!inp)return;
+  const it=items.find(i=>i.id==inp.closest(".row").dataset.id); if(!it)return;
+  if(inp.dataset.k==="fornecedor"){ it.fornecedor=nomeLimpo(it.fornecedor); if(it.fornecedor) confirmaNome(it); }
+  if(inp.dataset.k==="numero"){ it.numero=limpaNumero(it.numero); }
+  if(nomeFinal(it) && it.status==="warn" && !it.confirmar){ it.status="ok"; it.statusTxt="Conferido"; }
+  render();
+});
+rowsEl.addEventListener("click",async e=>{
+  const b=e.target.closest("button[data-act]"); if(!b)return;
+  const it=items.find(i=>i.id==b.closest(".row").dataset.id); if(!it)return;
+  if(b.dataset.act==="ia"){ it.fornecedor=""; it.numero=""; enfileiraIA(it); }
+  if(b.dataset.act==="ok"){ confirmaNome(it); render(); return; }
+  if(b.dataset.act==="ver"){ it.aberta=!it.aberta; render(); return; }
+  if(b.dataset.act==="dl"){ await salvar(nomesUnicos()[it.id], new Blob([it.buf],{type:"application/pdf"})); }
+});
+
+function confirmaNome(it){
+  it.confirmar=false;
+  if(nomeFinal(it)&&it.status==="warn"){ it.status="ok"; it.statusTxt="Nome confirmado"; }
+  if(!it.cnpj) return;
+  saveAlias(it.cnpj,it.fornecedor);
+  for(const o of items) if(o!==it && o.cnpj===it.cnpj && o.status!=="busy"){ o.fornecedor=it.fornecedor; o.confirmar=false;
+    if(nomeFinal(o)&&o.status==="warn"){o.status="ok";o.statusTxt="Fornecedor salvo";} }
+}
+async function salvar(nome,blob){
+  if(!downloads){ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),10000); return; }
+  try{ await downloads.save({filename:nome,data:blob}); }
+  catch(e){ if(e&&e.code==="declined")return; if(e&&e.code==="rate_limited"){aviso("Já existe um download aguardando confirmação.","warn");return;} aviso("Não foi possível baixar: "+(e&&e.message||"erro"),"bad"); }
+}
+
+$("#btnZip").addEventListener("click",async()=>{
+  const btn=$("#btnZip"); const finals=nomesUnicos();
+  const prontos=items.filter(i=>finals[i.id]&&i.status!=="busy");
+  const pend=items.length-prontos.length;
+  btn.disabled=true; const old=btn.textContent; btn.textContent="Montando ZIP…";
+  try{
+    const zip=new JSZip(); prontos.forEach(i=>zip.file(finals[i.id],i.buf));
+    const blob=await zip.generateAsync({type:"blob"});
+    const d=new Date(), stamp=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    if(pend) aviso(`${pend} nota(s) sem fornecedor ou número ficaram fora do ZIP.`,"warn");
+    await salvar(`notas-renomeadas-${stamp}.zip`,blob);
+  } finally { btn.textContent=old; render(); }
+});
+$("#btnClear").addEventListener("click",()=>{ items.forEach(i=>{if(i.previa)try{URL.revokeObjectURL(i.previa)}catch(e){}}); items=[]; aiQueue=[]; msgsEl.innerHTML=""; shown.clear(); render(); });
+
+/* ---- importação ---- */
+async function adiciona(files){
+  const pdfs=[...files].filter(f=>/\.pdf$/i.test(f.name)||f.type==="application/pdf");
+  if(!pdfs.length){ aviso("Nenhum PDF encontrado na seleção.","warn"); return; }
+  if(!window.pdfjsLib){ aviso("O leitor de PDF não carregou. Recarregue a página.","bad"); return; }
+  pdfs.sort((a,b)=>a.name.localeCompare(b.name,"pt",{numeric:true}));
+  const novos=[];
+  for(const f of pdfs){ const it={id:nextId++,nome:f.name,buf:await f.arrayBuffer(),fornecedor:"",numero:"",razao:"",cnpj:"",status:"busy",statusTxt:"Na fila"}; items.push(it); novos.push(it); }
+  render();
+  for(const it of novos) await processa(it);
+}
+const input=$("#fileInput"), drop=$("#drop");
+input.addEventListener("change",()=>{ adiciona(input.files); input.value=""; });
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>adiciona(e.dataTransfer.files));
+
+/* ---- opções ---- */
+const optIA=$("#optIA"), optIATxt=$("#optIATxt");
+function syncIA(){ optIA.checked=iaOn; optIATxt.textContent=iaOn?"Ligada":"Desligada"; }
+optIA.addEventListener("change",()=>{ iaOn=optIA.checked; try{localStorage.setItem(IAKEY,iaOn?"1":"0")}catch(e){} syncIA();
+  if(iaOn && sampleReady && (!sample||!sampleImages)) aviso("A leitura pela IA não está disponível neste visualizador.","warn");
+  render(); });
+syncIA(); contaForn();
+
+$("#csvInput").addEventListener("change",async e=>{
+  const f=e.target.files[0]; e.target.value=""; if(!f)return;
+  let txt=new TextDecoder("utf-8").decode(await f.arrayBuffer());
+  if(txt.includes(String.fromCharCode(0xFFFD))) txt=new TextDecoder("windows-1252").decode(await f.arrayBuffer()); // CSV salvo pelo Excel
+  let n=0, semFant=0; const m=loadAlias(); let iF=-1, iR=-1;
+  for(const linha of txt.split(/\r?\n/)){
+    const cels=linha.split(/[;\t]|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(c=>c.replace(/^"|"$/g,"").trim());
+    const iC=cels.findIndex(c=>c.replace(/\D/g,"").length===14 && /^[\d.\/\- ]+$/.test(c));
+    if(iC<0){ // pode ser o cabeçalho
+      const h=cels.map(c=>semAcento(c).toLowerCase());
+      const f=h.findIndex(c=>c.includes("fantasia")); if(f>=0) iF=f;
+      const r=h.findIndex(c=>c.includes("razao")||c==="nome"||c.includes("fornecedor")); if(r>=0&&r!==f) iR=r;
+      continue;
+    }
+    let nome="";
+    if(iF>=0&&cels[iF]) nome=nomeLimpo(cels[iF]);
+    else { const raz=(iR>=0&&cels[iR])||cels.find((c,i)=>i!==iC&&/[A-Za-zÀ-ú]{2,}/.test(c)); if(raz){nome=primeiroNome(raz); semFant++;} }
+    if(!nome)continue;
+    m[cels[iC].replace(/\D/g,"")]=nome; n++;
+  }
+  try{localStorage.setItem(KEY,JSON.stringify(m))}catch(e){}
+  contaForn();
+  aviso(n?`${n} fornecedor(es) importado(s).`+(semFant?` ${semFant} sem coluna de nome fantasia: usado o 1º nome da razão social.`:""):"Nenhuma linha com CNPJ e nome foi encontrada no arquivo.", n&&!semFant?"":"warn");
+  for(const it of items) if(it.cnpj && m[it.cnpj] && (!it.fornecedor||it.confirmar)){ it.fornecedor=m[it.cnpj]; it.confirmar=false; if(nomeFinal(it)){it.status="ok";it.statusTxt="Fornecedor do cadastro";} }
+  render();
+});
+
+/* ---- capacidades ---- */
+render();
+(async()=>{
+  try{
+    const c=window.claude; // só existe dentro do claude.ai; no site próprio a IA fica oculta
+    if(c&&c.use){
+      const [s,d]=await Promise.all([c.use("sample"),c.use("downloads")]);
+      sample=s; downloads=d;
+      if(sample){ try{ const l=await sample.limits(); sampleImages=!!(l&&l.images);}catch(e){sampleImages=false} }
+    }
+  }catch(e){}
+  sampleReady=true;
+  if(!sample){ iaOn=false; const bx=document.getElementById("optIABox"); if(bx) bx.hidden=true; }
+  if(iaOn&&(!sample||!sampleImages)) aviso("A leitura pela IA não está disponível aqui. O app continua lendo o texto e o código de barras.","warn");
+  const pend=aiQueue.splice(0); pend.forEach(enfileiraIA);
+  render();
+})();
+})();
+</script>
+
+</body>
+</html>
